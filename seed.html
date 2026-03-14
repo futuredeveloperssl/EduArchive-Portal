@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>EduArchive — Firestore Seeder</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a0a0f; color: #e8e8f0; font-family: 'Inter', sans-serif; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .card { background: #12121a; border: 1px solid #1e1e2e; border-radius: 16px; padding: 36px; max-width: 600px; width: 100%; }
+    h1 { font-family: 'Space Grotesk', sans-serif; font-size: 1.6rem; margin-bottom: 8px; }
+    h1 span { color: #ff922b; }
+    .subtitle { color: #6b7280; font-size: 14px; margin-bottom: 28px; }
+    .warning { background: rgba(255,107,0,0.1); border: 1px solid rgba(255,107,0,0.3); border-radius: 10px; padding: 14px; font-size: 13px; color: #ffa94d; margin-bottom: 24px; }
+    .step { background: rgba(255,255,255,0.03); border: 1px solid #1e1e2e; border-radius: 10px; padding: 16px; margin-bottom: 12px; font-size: 14px; }
+    .step-title { font-weight: 600; margin-bottom: 4px; }
+    .step-desc  { color: #6b7280; font-size: 13px; }
+    .btn { padding: 14px 24px; border-radius: 10px; border: none; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%; margin-top: 8px; font-family: 'Inter', sans-serif; transition: all 0.2s; }
+    .btn-fire   { background: linear-gradient(135deg, #6c63ff, #a78bfa); color: #fff; }
+    .btn-fire:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .log-box { background: #07070d; border: 1px solid #1e1e2e; border-radius: 10px; padding: 16px; font-size: 12px; font-family: monospace; max-height: 280px; overflow-y: auto; margin-top: 16px; white-space: pre-wrap; line-height: 1.7; }
+    .log-ok   { color: #40c057; }
+    .log-skip { color: #ffa94d; }
+    .log-err  { color: #ff6b6b; }
+    .log-info { color: #74c0fc; }
+    .done-badge { background: rgba(64,192,87,0.1); border: 1px solid rgba(64,192,87,0.3); border-radius: 10px; padding: 16px; text-align: center; font-size: 15px; margin-top: 16px; display: none; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>🔥 Firestore <span>Seeder</span></h1>
+  <p class="subtitle">One-click tool to populate your Firebase project with initial EduArchive data.</p>
+
+  <div class="warning">
+    ⚠️ <strong>Run once only.</strong> This creates months, lessons, and user accounts. Re-running will skip existing records. Keep this page private.
+  </div>
+
+  <div class="step"><div class="step-title">Step 1 — Months & Lessons</div><div class="step-desc">Creates 4 months (Jan–Apr 2026) with 3 sample lessons each in Firestore.</div></div>
+  <div class="step"><div class="step-title">Step 2 — Admin Account</div><div class="step-desc">Creates admin@eduarchive.app (password: <strong>Admin@2026</strong>) with role = admin in Firestore.</div></div>
+  <div class="step"><div class="step-title">Step 3 — Demo Student</div><div class="step-desc">Creates demo student (phone 0771234567, password: <strong>Student@2026</strong>) with January unlocked.</div></div>
+
+  <button class="btn btn-fire" id="seedBtn" onclick="runSeed()">🚀 Run Full Seed</button>
+
+  <div class="log-box" id="logBox"><span class="log-info">Click "Run Full Seed" to begin…</span></div>
+  <div class="done-badge" id="doneBadge">✅ Seeding complete! You can now log in at <a href="index.html" style="color:#a78bfa">index.html</a></div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<script>
+// Self-contained init — no persistence, works fine from file://
+const firebaseConfig = {
+  apiKey: "AIzaSyB1QU1cPh3foS5wc_X7sbU1AS430eBmFcI",
+  authDomain: "eduarchive-3ac31.firebaseapp.com",
+  projectId: "eduarchive-3ac31",
+  storageBucket: "eduarchive-3ac31.firebasestorage.app",
+  messagingSenderId: "802694406643",
+  appId: "1:802694406643:web:62b4dd538dbd92921df286"
+};
+if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+const fbAuth = firebase.auth();
+const fbDb   = firebase.firestore();
+// No enablePersistence — avoids hanging on file:// URLs
+</script>
+<script>
+const log = (msg, type = 'info') => {
+  const box = document.getElementById('logBox');
+  const line = document.createElement('div');
+  line.className = `log-${type}`;
+  const ts = new Date().toLocaleTimeString('en', { hour12: false });
+  line.textContent = `[${ts}] ${msg}`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+};
+
+const MONTHS = [
+  { id: '2026-01', label: 'January 2026',  releaseDate: new Date('2026-01-01') },
+  { id: '2026-02', label: 'February 2026', releaseDate: new Date('2026-02-01') },
+  { id: '2026-03', label: 'March 2026',    releaseDate: new Date('2026-03-01') },
+  { id: '2026-04', label: 'April 2026',    releaseDate: new Date('2026-04-01') },
+];
+
+const LESSONS = [
+  // January 2026 (1-15)
+  { monthId:'2026-01', title:'දත්තවල සහ තොරතුරුවල මූලික තැනුම් ඒකක - 1', youtubeId:'w48VFlBvVdg', duration:'45:20', order:1 },
+  { monthId:'2026-01', title:'දත්තවල සහ තොරතුරුවල මූලික තැනුම් ඒකක - 2', youtubeId:'4th4KbZhW8w', duration:'48:15', order:2 },
+  { monthId:'2026-01', title:'දත්ත හා තොරතුරු නිර්මාණය - 1', youtubeId:'imqLd4IW_mE', duration:'52:30', order:3 },
+  { monthId:'2026-01', title:'දත්ත හා තොරතුරු නිර්මාණය - 2', youtubeId:'EAAEZ146NGA', duration:'50:45', order:4 },
+  { monthId:'2026-01', title:'දත්ත හා තොරතුරු නිර්මාණය - 3', youtubeId:'nXIhgeqdM1s', duration:'47:10', order:5 },
+  { monthId:'2026-01', title:'තොරතුරු නිර්මාණය කිරීමේ වියුක්ත අකෘතිය', youtubeId:'i1CDWKFoZq0', duration:'42:00', order:6 },
+  { monthId:'2026-01', title:'පරිඝණක පද්ධතියක මූලික සහ වර්ගීකරණය', youtubeId:'dpf4TQCW780', duration:'55:10', order:7 },
+  { monthId:'2026-01', title:'දත්ත සැකසුම් විශ්ලේෂණය - 1', youtubeId:'rCDpV3pPbsY', duration:'49:30', order:8 },
+  { monthId:'2026-01', title:'දත්ත සැකසුම් විශ්ලේෂණය - 2', youtubeId:'1p2HCcz9wTE', duration:'51:20', order:9 },
+  { monthId:'2026-01', title:'යෙදුම් විමර්ශණ - 1', youtubeId:'tRrEey79Las', duration:'44:45', order:10 },
+  { monthId:'2026-01', title:'යෙදුම් විමර්ශණ - 2', youtubeId:'VuBibYNbV2k', duration:'46:30', order:11 },
+  { monthId:'2026-01', title:'සමාජය කෙරෙහි තොරතුරු තාක්ෂණයේ බලපෑම', youtubeId:'2ogVZDvEgN8', duration:'38:15', order:12 },
+  { monthId:'2026-01', title:'පසුගිය විභාග ප්‍රශ්න - 1', youtubeId:'BPjpVfBd3Ao', duration:'58:00', order:13 },
+  { monthId:'2026-01', title:'පසුගිය විභාග ප්‍රශ්න - 2', youtubeId:'fTLxJZGd5v0', duration:'57:30', order:14 },
+  { monthId:'2026-01', title:'පසුගිය විභාග ප්‍රශ්න - 3', youtubeId:'uFQya9U1pM8', duration:'60:00', order:15 },
+
+  // February 2026 (16-30)
+  { monthId:'2026-02', title:'සකසනයේ පරිණාමය හා වෙනස්කම් - 1', youtubeId:'0dTyEzTKB5A', duration:'45:00', order:1 },
+  { monthId:'2026-02', title:'සකසනයේ පරිණාමය හා වෙනස්කම් - 2', youtubeId:'89uNGTLG42w', duration:'48:00', order:2 },
+  { monthId:'2026-02', title:'සකසනයේ පරිණාමය හා වෙනස්කම් - 3', youtubeId:'7mEwP-5yt5c', duration:'50:00', order:3 },
+  { monthId:'2026-02', title:'දෘඩාංග හා අතුරු මුහුණත් ගවේෂණය - 1', youtubeId:'8qz5VNr9-9c', duration:'52:00', order:4 },
+  { monthId:'2026-02', title:'දෘඩාංග හා අතුරු මුහුණත් ගවේෂණය - 2', youtubeId:'O2f-efRVsig', duration:'54:00', order:5 },
+  { monthId:'2026-02', title:'දෘඩාංග හා අතුරු මුහුණත් ගවේෂණය - 3', youtubeId:'0X86niJWOIQ', duration:'49:00', order:6 },
+  { monthId:'2026-02', title:'දෘඩාංග හා අතුරු මුහුණත් ගවේෂණය - 4', youtubeId:'Na3Kkmr2CuQ', duration:'51:00', order:7 },
+  { monthId:'2026-02', title:'වොන් නියුමන් අකෘතිය', youtubeId:'KTXqt2NAMUI', duration:'44:00', order:8 },
+  { monthId:'2026-02', title:'මතක ධූරාවලිය - 1', youtubeId:'mOfEP922tLo', duration:'46:00', order:9 },
+  { monthId:'2026-02', title:'මතක ධූරාවලිය - 2', youtubeId:'Y3DnY7TtiLk', duration:'48:00', order:10 },
+  { monthId:'2026-02', title:'පසුගිය විභාග ප්‍රශ්න (Unit 2)', youtubeId:'lv2DfQh2aSk', duration:'55:00', order:11 },
+  { monthId:'2026-02', title:'සංඛ්‍යා නිරූපණය - 1', youtubeId:'8VIFwSyMqY4', duration:'57:00', order:12 },
+  { monthId:'2026-02', title:'සංඛ්‍යා නිරූපණය - 2', youtubeId:'h4En5QB6k8E', duration:'60:00', order:13 },
+  { monthId:'2026-02', title:'සංඛ්‍යා නිරූපණය - 3', youtubeId:'l2WY2D8fDiw', duration:'52:00', order:14 },
+  { monthId:'2026-02', title:'අනුලක්ෂණ නිරූපනය කරන ක්‍රම', youtubeId:'EzRgqMufEpk', duration:'44:00', order:15 },
+
+  // March 2026 (31-45)
+  { monthId:'2026-03', title:'අංක ගණිතමය සහ තාර්කික මෙහෙයුම් - 1', youtubeId:'EZOMysTsIbA', duration:'45:00', order:1 },
+  { monthId:'2026-03', title:'අංක ගණිතමය සහ තාර්කික මෙහෙයුම් - 2', youtubeId:'w3aj_GYumMM', duration:'48:00', order:2 },
+  { monthId:'2026-03', title:'සමාලෝචන ප්‍රශ්න (Unit 3) - 1', youtubeId:'ewO1WyNqHN0', duration:'50:00', order:3 },
+  { monthId:'2026-03', title:'සමාලෝචන ප්‍රශ්න (Unit 3) - 2', youtubeId:'LHjGHVRIw_o', duration:'52:00', order:4 },
+  { monthId:'2026-03', title:'සමාලෝචන ප්‍රශ්න (Unit 3) - 3', youtubeId:'Q4q-llH9olU', duration:'54:00', order:5 },
+  { monthId:'2026-03', title:'මූලික තාර්කික ද්වාර - 1', youtubeId:'n2DaEgE0m4w', duration:'49:00', order:6 },
+  { monthId:'2026-03', title:'මූලික තාර්කික ද්වාර - 2', youtubeId:'hsa9XB8RBLE', duration:'51:00', order:7 },
+  { monthId:'2026-03', title:'මූලික තාර්කික ද්වාර - 3', youtubeId:'bFrevu8H1W0', duration:'44:00', order:8 },
+  { monthId:'2026-03', title:'මූලික තාර්කික ද්වාර - 4', youtubeId:'T1l-b5dQYAA', duration:'46:00', order:9 },
+  { monthId:'2026-03', title:'මූලික තාර්කික ද්වාර - 5', youtubeId:'TKXXzi_qj3A', duration:'48:00', order:10 },
+  { monthId:'2026-03', title:'තාර්කික ද්වාර සංකීර්ණ - 1', youtubeId:'92Z6jD26qhw', duration:'55:00', order:11 },
+  { monthId:'2026-03', title:'තාර්කික ද්වාර සංකීර්ණ - 2', youtubeId:'lWyPOrCF6LE', duration:'57:00', order:12 },
+  { monthId:'2026-03', title:'තාර්කික ද්වාර සංකීර්ණ - 3', youtubeId:'DjxCG6v5QuU', duration:'60:00', order:13 },
+  { monthId:'2026-03', title:'තාර්කික ද්වාර සංකීර්ණ - 4', youtubeId:'HGYhWtfWS6c', duration:'52:00', order:14 },
+  { monthId:'2026-03', title:'තාර්කික ද්වාර සංකීර්ණ - 5', youtubeId:'dQZ1L1VHmpY', duration:'44:00', order:15 },
+
+  // April 2026 (46-60)
+  { monthId:'2026-04', title:'තාර්කික ද්වාර සංකීර්ණ - 6', youtubeId:'kYlI-NG1Nl0', duration:'45:00', order:1 },
+  { monthId:'2026-04', title:'තාර්කික ද්වාර සංකීර්ණ - 7', youtubeId:'eOzceT-aErQ', duration:'48:00', order:2 },
+  { monthId:'2026-04', title:'තාර්කික ද්වාර සංකීර්ණ - 8', youtubeId:'v4RajRinOlY', duration:'50:00', order:3 },
+  { monthId:'2026-04', title:'CPU හා භෞතික මතකයේ ඒකක', youtubeId:'olSbDhqwbeo', duration:'52:00', order:4 },
+  { monthId:'2026-04', title:'අංකිත පරිපථ වල බිටු ගබඩා කිරීම', youtubeId:'r3ZSkObJ9ao', duration:'54:00', order:5 },
+  { monthId:'2026-04', title:'2018 AL ප්‍රශ්ණ සකච්චාව', youtubeId:'iInUrh3jXc0', duration:'49:00', order:6 },
+  { monthId:'2026-04', title:'තාර්කික ද්වාර සමාලෝචන - 1', youtubeId:'1KCwcLMgZYc', duration:'51:00', order:7 },
+  { monthId:'2026-04', title:'තාර්කික ද්වාර සමාලෝචන - 2', youtubeId:'Vcs4gsD35XY', duration:'44:00', order:8 },
+  { monthId:'2026-04', title:'තාර්කික ද්වාර සමාලෝචන - 3', youtubeId:'7lo2G8Bx2ns', duration:'46:00', order:9 },
+  { monthId:'2026-04', title:'පරිඝණක මෙහෙයුම් පද්ධතිය - 1', youtubeId:'3_6-JLhtgak', duration:'48:00', order:10 },
+  { monthId:'2026-04', title:'පරිඝණක මෙහෙයුම් පද්ධතිය - 2', youtubeId:'AvY2VmQ8m9M', duration:'55:00', order:11 },
+  { monthId:'2026-04', title:'පරිඝණක මෙහෙයුම් පද්ධතිය - 3', youtubeId:'ogaRZMubL-w', duration:'57:00', order:12 },
+  { monthId:'2026-04', title:'පරිඝණක මෙහෙයුම් පද්ධතිය - 4', youtubeId:'G2THIL_ZLp8', duration:'60:00', order:13 },
+  { monthId:'2026-04', title:'පරිඝණක මෙහෙයුම් පද්ධතිය - 5', youtubeId:'YNN_gkXn9r4', duration:'52:00', order:14 },
+  { monthId:'2026-04', title:'ගොනු කළමණාකරනය - 1', youtubeId:'GR-peI952HQ', duration:'44:00', order:15 },
+];
+
+async function createOrSkipUser(phone, password, name, role, unlockedMonths = []) {
+  const email = phone.replace(/\s/g, '') + '@eduarchive.app';
+  try {
+    const cred = await fbAuth.createUserWithEmailAndPassword(email, password);
+    await fbDb.collection('users').doc(cred.user.uid).set({
+      name, phone, role,
+      unlockedMonths,
+      joinedAt: firebase.firestore.Timestamp.now(),
+    });
+    log(`  ✓ Created ${role}: ${name} (${phone})`, 'ok');
+  } catch (e) {
+    if (e.code === 'auth/email-already-in-use') {
+      log(`  ⚠ ${name} already exists — skipped.`, 'skip');
+    } else {
+      log(`  ✕ ${name}: ${e.message}`, 'err');
+    }
+  }
+}
+
+async function runSeed() {
+  document.getElementById('seedBtn').disabled = true;
+  document.getElementById('logBox').innerHTML = '';
+
+  log('── PHASE 1: Months ──', 'info');
+  for (const m of MONTHS) {
+    const snap = await fbDb.collection('months').doc(m.id).get();
+    if (snap.exists) { log(`  ⚠ Month ${m.label} already exists — skipped.`, 'skip'); continue; }
+    const lessonsForMonth = LESSONS.filter(l => l.monthId === m.id).length;
+    await fbDb.collection('months').doc(m.id).set({
+      label:        m.label,
+      releaseDate:  firebase.firestore.Timestamp.fromDate(m.releaseDate),
+      lessonsCount: lessonsForMonth,
+    });
+    log(`  ✓ Month ${m.label} created.`, 'ok');
+  }
+
+  log('── PHASE 2: Lessons ──', 'info');
+  for (const lesson of LESSONS) {
+    const snap = await fbDb.collection('lessons').where('title','==',lesson.title).where('monthId','==',lesson.monthId).get();
+    if (!snap.empty) { log(`  ⚠ Lesson "${lesson.title}" exists — skipped.`, 'skip'); continue; }
+    await fbDb.collection('lessons').add(lesson);
+    log(`  ✓ Lesson "${lesson.title}" created.`, 'ok');
+  }
+
+  log('── PHASE 3: User Accounts ──', 'info');
+  // Sign out any existing session first so we can create accounts
+  await fbAuth.signOut();
+
+  log('Creating admin account...', 'info');
+  await createOrSkipUser('0700000000', 'Admin@2026', 'Admin Teacher', 'admin', []);
+
+  log('Creating demo student...', 'info');
+  await createOrSkipUser('0771234567', 'Student@2026', 'Kavindu Perera', 'student', ['2026-01']);
+
+  log('', 'info');
+  log('✅ SEEDING COMPLETE!', 'ok');
+  log('Login with:', 'info');
+  log('  Teacher  → Phone: 0700000000 | Password: Admin@2026', 'ok');
+  log('  Student  → Phone: 0771234567 | Password: Student@2026', 'ok');
+  log('', 'info');
+  log('Open index.html to sign in.', 'info');
+
+  document.getElementById('doneBadge').style.display = 'block';
+  document.getElementById('seedBtn').textContent = '✅ Seeding Done';
+}
+</script>
+</body>
+</html>

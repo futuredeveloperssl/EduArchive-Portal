@@ -1,0 +1,7 @@
+.DS_Store
+Thumbs.db
+node_modules/
+.gemini/
+*.log
+tmp/
+C:\Users\Kavindu\.gemini\antigravity\brain\
