@@ -95,6 +95,11 @@
     nextBtn.disabled = index === lessons.length - 1;
 
     if (!player) {
+      if (typeof YT === 'undefined' || !YT.Player) {
+        console.log('[Player] YT API not ready, using iframe fallback.');
+        secureWrap.innerHTML = `<iframe width="100%" height="100%" src="https://www.youtube.com/embed/${lesson.youtubeId}?autoplay=1&rel=0" frameborder="0" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+        return;
+      }
       isPlayerReady = false;
       player = new YT.Player('ytPlayer', {
         height: '100%',
